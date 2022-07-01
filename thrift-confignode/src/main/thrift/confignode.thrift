@@ -245,6 +245,16 @@ struct TRegionRouteMapResp {
   3: optional map<common.TConsensusGroupId, common.TRegionReplicaSet> regionRouteMap
 }
 
+// show datanodes
+struct TShowDataNodesReq {
+  1: optional common.TConsensusGroupType consensusGroupType
+}
+
+struct TShowDataNodesResp {
+  1: required common.TSStatus status
+  2: optional list<common.TDataNodesInfo> dataNodesInfoList
+}
+
 service IConfigNodeRPCService {
 
   /* DataNode */
@@ -337,6 +347,10 @@ service IConfigNodeRPCService {
   /* Get confignode heartbeat */
 
   i64 getConfigNodeHeartBeat(i64 timestamp)
+
+  /* Show DataNodes */
+
+  TShowDataNodesResp showDataNodes(TShowDataNodesReq req)
 
 }
 
