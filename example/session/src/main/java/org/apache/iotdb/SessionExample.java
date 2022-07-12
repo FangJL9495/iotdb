@@ -69,9 +69,9 @@ public class SessionExample {
 
     // set session fetchSize
     session.setFetchSize(10000);
-
+//    session.setQueryTimeout(50000);
     try {
-      session.setStorageGroup("root.sg1");
+      session.setStorageGroup("root.sg2");
     } catch (StatementExecutionException e) {
       if (e.getStatusCode() != TSStatusCode.PATH_ALREADY_EXIST_ERROR.getStatusCode()) {
         throw e;
