@@ -19,9 +19,10 @@
 package org.apache.iotdb.confignode.service.thrift;
 
 import org.apache.iotdb.common.rpc.thrift.TConsensusGroupType;
-import org.apache.iotdb.common.rpc.thrift.TDataNodeInfo;
+import org.apache.iotdb.common.rpc.thrift.TDataNodeConfiguration;
 import org.apache.iotdb.common.rpc.thrift.TDataNodeLocation;
 import org.apache.iotdb.common.rpc.thrift.TEndPoint;
+import org.apache.iotdb.common.rpc.thrift.TNodeResource;
 import org.apache.iotdb.common.rpc.thrift.TRegionReplicaSet;
 import org.apache.iotdb.common.rpc.thrift.TSStatus;
 import org.apache.iotdb.common.rpc.thrift.TSeriesPartitionSlot;
@@ -46,9 +47,8 @@ import org.apache.iotdb.confignode.procedure.env.ConfigNodeProcedureEnv;
 import org.apache.iotdb.confignode.rpc.thrift.TAuthorizerReq;
 import org.apache.iotdb.confignode.rpc.thrift.TAuthorizerResp;
 import org.apache.iotdb.confignode.rpc.thrift.TCheckUserPrivilegesReq;
-import org.apache.iotdb.confignode.rpc.thrift.TClusterNodeInfos;
 import org.apache.iotdb.confignode.rpc.thrift.TCountStorageGroupResp;
-import org.apache.iotdb.confignode.rpc.thrift.TDataNodeInfoResp;
+import org.apache.iotdb.confignode.rpc.thrift.TDataNodeConfigurationResp;
 import org.apache.iotdb.confignode.rpc.thrift.TDataNodeRegisterReq;
 import org.apache.iotdb.confignode.rpc.thrift.TDataNodeRegisterResp;
 import org.apache.iotdb.confignode.rpc.thrift.TDataPartitionReq;
@@ -63,6 +63,7 @@ import org.apache.iotdb.confignode.rpc.thrift.TSetDataReplicationFactorReq;
 import org.apache.iotdb.confignode.rpc.thrift.TSetSchemaReplicationFactorReq;
 import org.apache.iotdb.confignode.rpc.thrift.TSetStorageGroupReq;
 import org.apache.iotdb.confignode.rpc.thrift.TSetTimePartitionIntervalReq;
+import org.apache.iotdb.confignode.rpc.thrift.TShowClusterResp;
 import org.apache.iotdb.confignode.rpc.thrift.TStorageGroupSchema;
 import org.apache.iotdb.confignode.rpc.thrift.TStorageGroupSchemaResp;
 import org.apache.iotdb.db.mpp.common.schematree.PathPatternTree;
@@ -145,18 +146,18 @@ public class ConfigNodeRPCServiceProcessorTest {
   private void registerDataNodes() throws TException {
     for (int i = 0; i < 3; i++) {
       TDataNodeLocation dataNodeLocation = new TDataNodeLocation();
+      dataNodeLocation.setDataNodeId(-1);
       dataNodeLocation.setClientRpcEndPoint(new TEndPoint("0.0.0.0", 6667 + i));
       dataNodeLocation.setInternalEndPoint(new TEndPoint("0.0.0.0", 9003 + i));
       dataNodeLocation.setMPPDataExchangeEndPoint(new TEndPoint("0.0.0.0", 8777 + i));
       dataNodeLocation.setDataRegionConsensusEndPoint(new TEndPoint("0.0.0.0", 40010 + i));
       dataNodeLocation.setSchemaRegionConsensusEndPoint(new TEndPoint("0.0.0.0", 50010 + i));
 
-      TDataNodeInfo dataNodeInfo = new TDataNodeInfo();
-      dataNodeInfo.setLocation(dataNodeLocation);
-      dataNodeInfo.setCpuCoreNum(8);
-      dataNodeInfo.setMaxMemory(1024 * 1024);
+      TDataNodeConfiguration dataNodeConfiguration = new TDataNodeConfiguration();
+      dataNodeConfiguration.setLocation(dataNodeLocation);
+      dataNodeConfiguration.setResource(new TNodeResource(8, 1024 * 1024));
 
-      TDataNodeRegisterReq req = new TDataNodeRegisterReq(dataNodeInfo);
+      TDataNodeRegisterReq req = new TDataNodeRegisterReq(dataNodeConfiguration);
       TDataNodeRegisterResp resp = processor.registerDataNode(req);
 
       Assert.assertEquals(TSStatusCode.SUCCESS_STATUS.getStatusCode(), resp.getStatus().getCode());
@@ -168,34 +169,35 @@ public class ConfigNodeRPCServiceProcessorTest {
   @Test
   public void testRegisterAndQueryDataNode() throws TException {
     registerDataNodes();
+    TDataNodeLocation dataNodeLocation = new TDataNodeLocation();
+    TDataNodeConfiguration dataNodeConfiguration = new TDataNodeConfiguration();
+    dataNodeConfiguration.setLocation(dataNodeLocation);
+    dataNodeConfiguration.setResource(new TNodeResource(8, 1024 * 1024));
+
+    TDataNodeRegisterReq req = new TDataNodeRegisterReq(dataNodeConfiguration);
+    TDataNodeRegisterResp resp;
 
     // test success re-register
-    TDataNodeLocation dataNodeLocation = new TDataNodeLocation();
+    dataNodeLocation.setDataNodeId(1);
     dataNodeLocation.setClientRpcEndPoint(new TEndPoint("0.0.0.0", 6668));
     dataNodeLocation.setInternalEndPoint(new TEndPoint("0.0.0.0", 9004));
     dataNodeLocation.setMPPDataExchangeEndPoint(new TEndPoint("0.0.0.0", 8778));
     dataNodeLocation.setDataRegionConsensusEndPoint(new TEndPoint("0.0.0.0", 40011));
     dataNodeLocation.setSchemaRegionConsensusEndPoint(new TEndPoint("0.0.0.0", 50011));
 
-    TDataNodeInfo dataNodeInfo = new TDataNodeInfo();
-    dataNodeInfo.setLocation(dataNodeLocation);
-    dataNodeInfo.setCpuCoreNum(8);
-    dataNodeInfo.setMaxMemory(1024 * 1024);
-
-    TDataNodeRegisterReq req = new TDataNodeRegisterReq(dataNodeInfo);
-    TDataNodeRegisterResp resp = processor.registerDataNode(req);
+    resp = processor.registerDataNode(req);
     Assert.assertEquals(
         TSStatusCode.DATANODE_ALREADY_REGISTERED.getStatusCode(), resp.getStatus().getCode());
     Assert.assertEquals(1, resp.getDataNodeId());
     checkGlobalConfig(resp.getGlobalConfig());
 
     // test query DataNodeInfo
-    TDataNodeInfoResp infoResp = processor.getDataNodeInfo(-1);
+    TDataNodeConfigurationResp infoResp = processor.getDataNodeConfiguration(-1);
     Assert.assertEquals(
         TSStatusCode.SUCCESS_STATUS.getStatusCode(), infoResp.getStatus().getCode());
-    Map<Integer, TDataNodeInfo> infoMap = infoResp.getDataNodeInfoMap();
+    Map<Integer, TDataNodeConfiguration> infoMap = infoResp.getDataNodeConfigurationMap();
     Assert.assertEquals(3, infoMap.size());
-    List<Map.Entry<Integer, TDataNodeInfo>> infoList = new ArrayList<>(infoMap.entrySet());
+    List<Map.Entry<Integer, TDataNodeConfiguration>> infoList = new ArrayList<>(infoMap.entrySet());
     infoList.sort(Comparator.comparingInt(Map.Entry::getKey));
     for (int i = 0; i < 3; i++) {
       dataNodeLocation.setDataNodeId(i);
@@ -207,10 +209,16 @@ public class ConfigNodeRPCServiceProcessorTest {
       Assert.assertEquals(dataNodeLocation, infoList.get(i).getValue().getLocation());
     }
 
-    infoResp = processor.getDataNodeInfo(0);
+    infoResp = processor.getDataNodeConfiguration(3);
     Assert.assertEquals(
         TSStatusCode.SUCCESS_STATUS.getStatusCode(), infoResp.getStatus().getCode());
-    infoMap = infoResp.getDataNodeInfoMap();
+    infoMap = infoResp.getDataNodeConfigurationMap();
+    Assert.assertEquals(0, infoMap.size());
+
+    infoResp = processor.getDataNodeConfiguration(0);
+    Assert.assertEquals(
+        TSStatusCode.SUCCESS_STATUS.getStatusCode(), infoResp.getStatus().getCode());
+    infoMap = infoResp.getDataNodeConfigurationMap();
     Assert.assertEquals(1, infoMap.size());
     Assert.assertNotNull(infoMap.get(0));
     dataNodeLocation.setDataNodeId(0);
@@ -223,10 +231,10 @@ public class ConfigNodeRPCServiceProcessorTest {
   }
 
   @Test
-  public void getAllClusterNodeInfosTest() throws TException {
+  public void showClusterTest() throws TException {
     registerDataNodes();
 
-    TClusterNodeInfos clusterNodes = processor.getAllClusterNodeInfos();
+    TShowClusterResp clusterNodes = processor.showCluster();
 
     List<TDataNodeLocation> dataNodeInfos = clusterNodes.getDataNodeList();
     Assert.assertEquals(3, dataNodeInfos.size());
@@ -275,7 +283,7 @@ public class ConfigNodeRPCServiceProcessorTest {
     Assert.assertEquals(2, countResp.getCount());
 
     // test count one StorageGroup
-    countResp = processor.countMatchedStorageGroups(Arrays.asList("root", "sg0", "**"));
+    countResp = processor.countMatchedStorageGroups(Arrays.asList("root", "sg0"));
     Assert.assertEquals(
         TSStatusCode.SUCCESS_STATUS.getStatusCode(), countResp.getStatus().getCode());
     Assert.assertEquals(1, countResp.getCount());
